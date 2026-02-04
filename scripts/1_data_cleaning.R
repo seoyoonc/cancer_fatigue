@@ -1,5 +1,5 @@
-# this file is for preprocessing, identifying and relabeling key variables,
-# checking correlations, and saving complete data for sensitivity analyses
+# this script is for identifying key variables, checking correlations, 
+# and saving complete data for sensitivity analyses
 # ==============================================================================
 
 library(here)
@@ -15,7 +15,6 @@ cat("Expected total rows (subjects x visits):",
     length(unique(data$subject)) * length(unique(data$visit)), "\n\n")
 
 # Group x visit distribution
-cat("\nGROUP x VISIT\n")
 table(data$group, data$visit, useNA = "always")
 
 # -------------------------------------------------
@@ -28,49 +27,42 @@ missing_summary <- rbind(
   percent_missing = missing_perc
 )
 
-# print(missing_summary)
-
-# -------------------------------------------------
-# Key variables
-
-# MFSI subscales (w/out total)
-mfsi_vars <- c("MFSIgen", "MFSIphys", "MFSIemot", "MFSIment", "MFSIvigor")
-
-# Immune markers
-immune_vars <- c("IL1b", "IL6", "TNF", "lgEBV", "lgCMV")
-
-# Covariates
-covariates <- c("age", "sex", "BMI", 
-                "Smoker", "ModExerciseMinWk", "InsomniaScore", 
-                "AlcWk", "Comorbid", "CancerTx")
-
-# -------------------------------------------------
-data_relabeled <- data %>%
-  # Labeling visit
+# Retention by group
+# First match controls by cancer type
+data_with_groups <- data %>%
   mutate(
-    visit = factor(visit, 
-                   levels = c(1, 2, 3), 
-                   labels = c("Baseline", "6 months", "18 months"))
+    cancer_controls = case_when(
+      group == "control" & subjecttype == "breast" ~ "Breast-matched Control",
+      group == "control" & subjecttype == "colorectal" ~ "CRC-matched Control",
+      group == "cancer" & subjecttype == "breast" ~ "BC",
+      group == "cancer" & subjecttype == "colorectal" ~ "CRC",
+      TRUE ~ NA_character_
+    )
+  )
+
+# table(data_with_groups$cancer_controls, useNA = "always")
+
+retention <- data_with_groups %>%
+  group_by(cancer_controls, visit) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(cancer_controls) %>%
+  mutate(
+    baseline_n = n[visit == 1],  # N at baseline (visit 1)
+    retention_rate = n / baseline_n,  # Proportion retained
+    retention_pct = round(retention_rate * 100, 1),  # Percentage
+    n_lost = baseline_n - n  # Number lost since baseline
   ) %>%
-  
-  # Create binary smoker variable in case
-  mutate(smoker_binary = ifelse(Smoker == "yes", 1, 0))
+  ungroup()
 
 # -------------------------------------------------
-# Correlations for inflammatory composite (relevant for Aim 2)
-immune_data <- data_relabeled %>% 
-  select(immune_vars[1:3]) %>%
-  drop_na()
+# Relabeling smoker variable to binary
 
-cat("\nIMMUNE MARKER CORRELATIONS\n")
-print(cor(immune_data))
-
----------------------------------------------------
-# Save cleaned datasets
+data_relabeled <- data %>%
+  mutate(smoker_binary = ifelse(Smoker == "yes", 1, 0))
 
 # Relabeled dataset for reference
 write.csv(data_relabeled,
-          file = here("data", "2_processed", "relabeleded.csv"),
+          file = here("data", "2_processed", "relabeled.csv"),
           row.names = FALSE)
 
 # ---------------------------------------------------

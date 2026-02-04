@@ -17,7 +17,8 @@ print(names(raw_data))
 # Convert to R dataframe
 raw_clean <- raw_data %>%
   haven::as_factor() %>%  # Convert labeled values to factors
-  as.data.frame()
+  as.data.frame() %>%
+  select(-VAR00002, -VAR00003)
 
 # Save as CSV
 write.csv(raw_clean, 
